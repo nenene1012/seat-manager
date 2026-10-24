@@ -1,0 +1,476 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#f3f5f7">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="席管理">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="apple-touch-icon" href="./icon-192.png">
+<title>座席利用時間管理</title>
+<style>
+:root{--bg:#f3f5f7;--panel:#fff;--ink:#18202a;--muted:#6c7682;--line:#d9dee5;--accent:#2563eb;--busy:#fff2cc;--free:#f1f3f5}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;min-height:100%;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans JP",sans-serif;background:var(--bg);color:var(--ink)}
+button,input,select{font:inherit}
+.app{min-height:100dvh;display:grid;grid-template-columns:minmax(0,2fr) minmax(300px,1fr);gap:12px;padding:12px}
+.panel{background:#fff;border:1px solid var(--line);border-radius:12px;overflow:hidden;box-shadow:0 4px 18px #0000000c}
+.left,.right{display:flex;flex-direction:column;min-width:0}
+.head{display:flex;align-items:center;justify-content:space-between;padding:13px 16px;border-bottom:1px solid var(--line)}.headtools{display:flex;align-items:center;gap:8px}.resetbtn{border:1px solid var(--line);background:#fff;border-radius:7px;padding:7px 10px;font-size:12px;font-weight:800;cursor:pointer}.statuspick.selected{outline:3px solid #222;outline-offset:2px}
+h1,h2{font-size:20px;margin:0}.hint{font-size:12px;color:var(--muted)}
+.map-wrap{flex:1;display:grid;place-items:center;padding:15px;min-height:0}
+.map{width:min(100%,76vh);aspect-ratio:1/1;display:grid;grid-template-columns:repeat(4,1fr);grid-template-rows:repeat(6,1fr);column-gap:8px;row-gap:6px}
+.seat,.gap,.register{min-width:0;min-height:0}
+.seat{border:2px solid #aeb7c2;border-radius:3px;background:var(--free);padding:5px;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;color:#222222;-webkit-text-fill-color:#222222}
+.seat.busy{background:var(--busy);border-color:#ddb74f}
+.seatno{font-size:clamp(18px,2.15vw,31px);font-weight:850;line-height:1}
+.meta,.until{font-size:clamp(10px,1.05vw,15px);font-weight:750;margin-top:5px;white-space:nowrap}
+.empty{font-size:11px;color:#728078;margin-top:5px}
+.gap{background:transparent}
+.register{border:2px solid #343b44;border-radius:3px;background:#e3e6ea;display:flex;align-items:center;justify-content:center;font-weight:850;color:#3c4650}
+/* 通路: 6-5、4-3、2-1 の間 */
+.map > :nth-child(n+1):nth-child(-n+4),
+.map > :nth-child(n+9):nth-child(-n+12),
+.map > :nth-child(n+17):nth-child(-n+20){margin-bottom:18px}
+.map > :nth-child(n+5):nth-child(-n+8),
+.map > :nth-child(n+13):nth-child(-n+16),
+.map > :nth-child(n+21):nth-child(-n+24){margin-top:18px}
+.listhead,.row{display:grid;grid-template-columns:.65fr 1fr 1fr;align-items:center}
+.listhead{padding:10px 15px;color:var(--muted);font-size:12px;font-weight:800;border-bottom:1px solid var(--line)}
+.queue{overflow:auto;flex:1}.row{padding:13px 15px;border-bottom:1px solid #edf0f3;font-size:16px}
+.row .num,.row .time{font-weight:850}.row .num{font-size:20px}.none{padding:28px 16px;text-align:center;color:var(--muted)}
+.footer{padding:9px 15px;border-top:1px solid var(--line);font-size:11px;color:var(--muted)}
+.dialog-overlay{display:none;position:fixed;inset:0;z-index:9999;background:#0006;align-items:center;justify-content:center;padding:16px}.dialog-overlay.open{display:flex}.dialog-box{background:#fff;border-radius:16px;width:min(92vw,450px);max-height:92vh;overflow:auto;box-shadow:0 25px 80px #0005}
+.modal{padding:20px}.modal h3{font-size:23px;margin:0 0 15px}
+.fieldlabel{display:block;font-size:13px;font-weight:800;color:#56616e;margin:13px 0 6px}
+input[type=time],input[type=number],select{width:100%;font-size:20px;padding:11px;border:1px solid var(--line);border-radius:8px;background:#fff}
+.courses{display:grid;grid-template-columns:1fr 1fr;gap:7px}.course{border:1px solid var(--line);border-radius:7px;padding:10px;cursor:pointer;background:#fff;font-weight:750}.course input{margin-right:6px}
+.preview{margin-top:13px;background:#f5f7fa;border-radius:8px;padding:12px;font-weight:800;min-height:45px}
+.linknote{font-size:12px;color:var(--muted);margin-top:6px}
+.seat.grouped{background:#eef8f0;border-color:#9bc7a4;box-shadow:inset 0 0 0 3px #9bc7a4}.seat.cleaning{background:#dff3fb;border-color:#79bfd8}.seat.unavailable{background:#f8dce6;border-color:#d99aae}.remaining{font-size:10px;font-weight:900;margin-top:3px}.remaining.over{color:#d00000!important;-webkit-text-fill-color:#d00000!important}
+.groupmark{font-size:10px;font-weight:850;margin-top:3px}
+.row.grouped{border-left:6px solid #9bc7a4;background:#f2faf4}
+.actions{display:flex;gap:7px;margin-top:15px}.actions button{border:0;border-radius:8px;padding:12px 13px;cursor:pointer;font-weight:850}
+.primary{background:var(--accent);color:#fff;flex:1}.secondary{background:#edf0f4}.danger{background:#fee9e9;color:#a71919}
+@media(max-width:760px){
+ .app{grid-template-columns:1fr;min-height:100dvh}
+ .map{width:100%;max-width:650px}
+ .right{min-height:360px}
+}
+
+.rulebtn{border:1px solid var(--line);background:#fff;color:#222;-webkit-text-fill-color:#222;border-radius:7px;padding:7px 10px;font-size:12px;font-weight:800;cursor:pointer}
+.rules-modal{position:fixed;inset:0;background:rgba(0,0,0,.38);display:none;align-items:center;justify-content:center;padding:18px;z-index:1000}
+.rules-modal.open{display:flex}
+.rules-card{width:min(560px,100%);max-height:88vh;overflow:auto;background:#fff;border-radius:14px;padding:20px;box-shadow:0 20px 60px rgba(0,0,0,.22);color:#222;-webkit-text-fill-color:#222}
+.rules-card h2{margin:0 0 16px;font-size:22px}
+.rules-card h3{margin:18px 0 10px;font-size:16px}
+.rules-card p{margin:7px 0;line-height:1.65}
+.rules-card .example{margin:10px 0 14px;padding:10px 12px;background:#f6f7f8;border-radius:8px;line-height:1.7}
+.rules-close{width:100%;margin-top:18px;border:0;border-radius:9px;background:#222;color:#fff;-webkit-text-fill-color:#fff;padding:11px;font-size:14px;font-weight:800;cursor:pointer}
+
+</style>
+</head>
+<body>
+<div class="app">
+<section class="panel left">
+ <div class="head"><div style="display:flex;align-items:center;gap:10px"><h1>席状況</h1><button class="rulebtn" id="rulesBtn" type="button">席ルール</button></div><div class="headtools"><div class="hint">席をタップして登録</div><button class="resetbtn" id="resetAll" type="button">全席リセット</button></div></div>
+ <div class="map-wrap"><div class="map" id="map">
+  <button class="seat" data-seat="63"><b class="seatno">63</b><span class="empty">空席</span></button><div class="gap"></div><button class="seat" data-seat="62"><b class="seatno">62</b><span class="empty">空席</span></button><button class="seat" data-seat="61"><b class="seatno">61</b><span class="empty">空席</span></button>
+  <button class="seat" data-seat="54"><b class="seatno">54</b><span class="empty">空席</span></button><button class="seat" data-seat="53"><b class="seatno">53</b><span class="empty">空席</span></button><button class="seat" data-seat="52"><b class="seatno">52</b><span class="empty">空席</span></button><button class="seat" data-seat="51"><b class="seatno">51</b><span class="empty">空席</span></button>
+  <button class="seat" data-seat="44"><b class="seatno">44</b><span class="empty">空席</span></button><button class="seat" data-seat="43"><b class="seatno">43</b><span class="empty">空席</span></button><button class="seat" data-seat="42"><b class="seatno">42</b><span class="empty">空席</span></button><button class="seat" data-seat="41"><b class="seatno">41</b><span class="empty">空席</span></button>
+  <button class="seat" data-seat="34"><b class="seatno">34</b><span class="empty">空席</span></button><button class="seat" data-seat="33"><b class="seatno">33</b><span class="empty">空席</span></button><button class="seat" data-seat="32"><b class="seatno">32</b><span class="empty">空席</span></button><button class="seat" data-seat="31"><b class="seatno">31</b><span class="empty">空席</span></button>
+  <button class="seat" data-seat="23"><b class="seatno">23</b><span class="empty">空席</span></button><div class="gap"></div><button class="seat" data-seat="22"><b class="seatno">22</b><span class="empty">空席</span></button><button class="seat" data-seat="21"><b class="seatno">21</b><span class="empty">空席</span></button>
+  <button class="seat" data-seat="13"><b class="seatno">13</b><span class="empty">空席</span></button><button class="seat" data-seat="12"><b class="seatno">12</b><span class="empty">空席</span></button><button class="seat" data-seat="11"><b class="seatno">11</b><span class="empty">空席</span></button><div class="register">レジ</div>
+ </div></div>
+</section>
+<aside class="panel right">
+ <div class="head"><h2>次に空く席</h2><div class="hint" id="count">使用中 0卓</div></div>
+ <div class="listhead"><span>席</span><span>コース</span><span>退席時刻</span></div>
+ <div class="queue" id="queue"><div class="none">現在、終了時刻が登録された席はありません</div></div>
+ <div class="footer">空く予定が早い順に自動表示</div>
+</aside>
+</div>
+
+<div id="dlg" class="dialog-overlay"><div class="dialog-box"><form class="modal" id="form">
+ <h3 id="title">席</h3>
+ <label class="fieldlabel" for="start">コーススタート</label><input id="start" type="time" required>
+ <span class="fieldlabel">コース</span>
+ <div class="courses">
+  <label class="course"><input type="radio" name="course" value="ST" checked>ST　スタンダード</label>
+  <label class="course"><input type="radio" name="course" value="SUSHI">🍣　寿司</label>
+  <label class="course"><input type="radio" name="course" value="SP">SP　スペシャル</label>
+  <label class="course"><input type="radio" name="course" value="CHEESE">🧀　チーズ三昧</label>
+  <label class="course"><input type="radio" name="course" value="P">P　プレミアム</label>
+ </div>
+ <label class="fieldlabel" for="extend">延長時間（分）</label>
+  <input id="extend" type="number" min="0" step="1" inputmode="numeric" value="0" placeholder="例：20">
+  <label class="fieldlabel" for="linked">同じ卓として紐づける席</label>
+  <select id="linked"><option value="">なし</option></select>
+  <div class="linknote">同じタブレットでコース選択している席を指定できます。</div>
+  <span class="fieldlabel">席の状態</span>
+  <div class="actions" style="margin-top:6px">
+   <button type="button" class="secondary statuspick" id="setCleaning">清掃中</button>
+   <button type="button" class="danger statuspick" id="setUnavailable">使用不可</button>
+  </div>
+  <div class="preview" id="preview"></div>
+ <div class="actions"><button type="button" class="secondary" id="cancel">キャンセル</button><button type="button" class="danger" id="clear">リセット</button><button class="primary" type="submit">登録</button></div>
+</form></div></div>
+
+
+<div class="rules-modal" id="rulesModal" aria-hidden="true">
+  <div class="rules-card" role="dialog" aria-modal="true" aria-labelledby="rulesTitle">
+    <h2 id="rulesTitle">席ルール</h2>
+
+    <h3>通常コース</h3>
+
+    <p><strong>ST（スタンダード）</strong><br>
+    利用時間：<strong>80分</strong></p>
+
+    <p><strong>🍣（寿司コース）</strong><br>
+    利用時間：<strong>100分</strong></p>
+
+    <p><strong>SP（スペシャル）</strong><br>
+    利用時間：<strong>120分</strong></p>
+
+    <p><strong>🧀（チーズ三昧）・P（プレミアム）</strong></p>
+
+    <p>ランチ・ディナーで利用時間が異なります。</p>
+
+    <p><strong>ランチ（16:00より前に開始）</strong><br>
+    基本は<strong>16:00まで時間無制限</strong>。</p>
+
+    <p>ただし、利用開始から16:00までが2時間未満になる場合は、<strong>開始時刻から120分制</strong>になります。</p>
+
+    <div class="example">
+      例：<br>
+      13:00開始 → <strong>16:00まで</strong><br>
+      14:00開始 → <strong>16:00まで</strong><br>
+      14:01開始 → <strong>16:01まで</strong><br>
+      14:30開始 → <strong>16:30まで</strong><br>
+      15:30開始 → <strong>17:30まで</strong>
+    </div>
+
+    <p><strong>ディナー（16:00以降に開始）</strong><br>
+    <strong>21:00まで時間無制限</strong>。</p>
+
+    <div class="example">
+      例：<br>
+      16:00開始 → <strong>21:00まで</strong><br>
+      18:00開始 → <strong>21:00まで</strong>
+    </div>
+
+    <p><strong>延長</strong><br>
+    延長が設定されている場合は、上記で算出された退席時刻に<strong>延長時間を加算</strong>します。（油の温度が上がらない場合など）</p>
+
+    <button class="rules-close" id="rulesClose" type="button">閉じる</button>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+(function(){
+"use strict";
+
+const defs={
+ ST:{short:"ST",min:80},
+ SUSHI:{short:"🍣",min:100},
+ SP:{short:"SP",min:120},
+ CHEESE:{short:"🧀",min:null},
+ P:{short:"P",min:null}
+};
+const STORAGE_KEY="seat-manager-pwa-v3";
+const OLD_KEYS=["seat-manager-pwa-v2","seat-manager-pwa-v1"];
+const colors=["#60a5fa"];
+const SUPABASE_URL="https://kxypdvpdnfimxoymhjet.supabase.co";
+const SUPABASE_KEY="sb_publishable_Ze4GoeVVrWDFIwdRjI1ZBA_7_eTTvj2";
+const db=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
+let state={},selected=null,pendingStatus="busy",cloudReady=false;
+
+function load(){
+ let raw=localStorage.getItem(STORAGE_KEY);
+ if(!raw){for(const k of OLD_KEYS){raw=localStorage.getItem(k);if(raw)break}}
+ try{state=raw?JSON.parse(raw):{}}catch(e){state={}}
+}
+function save(){try{localStorage.setItem(STORAGE_KEY,JSON.stringify(state))}catch(e){}}
+function rowFromState(no,d){
+ return {seat_no:String(no),status:d.status||"busy",start_time:d.start||null,course:d.course||null,extension:Number(d.extend)||0,group_id:d.groupId||null};
+}
+function stateFromRows(rows){
+ const next={};
+ (rows||[]).forEach(function(r){
+   next[String(r.seat_no)]={status:r.status||"busy",start:r.start_time||null,course:r.course||null,extend:Number(r.extension)||0,groupId:r.group_id||null};
+ });
+ return next;
+}
+async function cloudLoad(){
+ const res=await db.from("seats").select("seat_no,status,start_time,course,extension,group_id");
+ if(res.error){console.error("Supabase load error",res.error);return false;}
+ state=stateFromRows(res.data);save();render();cloudReady=true;return true;
+}
+async function cloudUpsertSeats(nos){
+ const ids=Array.from(new Set(nos)).map(String),rows=ids.filter(n=>state[n]).map(n=>rowFromState(n,state[n]));
+ if(!ids.length)return;
+ let res=await db.from("seats").delete().in("seat_no",ids);
+ if(res.error){console.error("Supabase replace/delete error",res.error);return;}
+ if(!rows.length)return;
+ res=await db.from("seats").insert(rows);
+ if(res.error)console.error("Supabase save error",res.error);
+}
+async function cloudDeleteSeats(nos){
+ const list=Array.from(new Set(nos)).map(String);if(!list.length)return;
+ const res=await db.from("seats").delete().in("seat_no",list);
+ if(res.error)console.error("Supabase delete error",res.error);
+}
+async function cloudResetAll(){
+ const res=await db.from("seats").delete().not("seat_no","is",null);
+ if(res.error)console.error("Supabase reset error",res.error);
+}
+function subscribeCloud(){
+ db.channel("seat-manager-live").on("postgres_changes",{event:"*",schema:"public",table:"seats"},async function(){
+   await cloudLoad();
+ }).subscribe();
+}
+function $(s){return document.querySelector(s)}
+ $("#rulesBtn").addEventListener("click",function(){
+   $("#rulesModal").classList.add("open");
+   $("#rulesModal").setAttribute("aria-hidden","false");
+ });
+ $("#rulesClose").addEventListener("click",function(){
+   $("#rulesModal").classList.remove("open");
+   $("#rulesModal").setAttribute("aria-hidden","true");
+ });
+ $("#rulesModal").addEventListener("click",function(e){
+   if(e.target===this){
+     this.classList.remove("open");
+     this.setAttribute("aria-hidden","true");
+   }
+ });
+function $$(s){return Array.from(document.querySelectorAll(s))}
+function pad(n){return String(n).padStart(2,"0")}
+function toMin(t){const a=t.split(":").map(Number);return a[0]*60+a[1]}
+function fmt(m){return pad(Math.floor((m%1440)/60))+":"+pad(m%60)}
+function now(){const d=new Date();return pad(d.getHours())+":"+pad(d.getMinutes())}
+
+function calc(start,course,extend){
+ const s=toMin(start),meal=s<960?"L":"D",def=defs[course];
+ extend=Math.max(0,Number(extend)||0);
+ let end;
+ if(def.min===null){
+   // 🧀 / P
+   // L: 2時間後が16:00を超える場合は2時間制。それ以前なら16:00まで。
+   // D: 21:00まで。
+   end=meal==="L" ? ((s+120>960)?s+120:960) : 1260;
+   end+=extend;
+ }else{
+   end=s+def.min+extend;
+ }
+ return {meal:meal,end:end};
+}
+
+function members(no){
+ const d=state[no];
+ if(!d)return [];
+ if(!d.groupId)return [no];
+ return Object.keys(state).filter(n=>state[n]&&state[n].groupId===d.groupId);
+}
+function color(gid){
+ let n=0;
+ for(let i=0;i<gid.length;i++)n+=gid.charCodeAt(i);
+ return colors[n%colors.length];
+}
+function closeModal(){$("#dlg").classList.remove("open")}
+function openModal(){$("#dlg").classList.add("open")}
+
+function fillLinked(no){
+ const sel=$("#linked");
+ sel.innerHTML='<option value="">なし</option>';
+ $$(".seat").forEach(function(b){
+   const n=b.dataset.seat;
+   if(n===no)return;
+   const o=document.createElement("option");
+   o.value=n;
+   o.textContent=n+(state[n]?"（使用中）":"");
+   sel.appendChild(o);
+ });
+}
+
+function preview(){
+ const r=$('input[name="course"]:checked');
+ const start=$("#start").value;
+ if(!r||!start)return;
+ const ext=Math.max(0,Number($("#extend").value)||0);
+ const x=calc(start,r.value,ext);
+ const linked=$("#linked").value;
+ $("#preview").textContent=x.meal+" / "+defs[r.value].short+" → "+fmt(x.end)+" まで"+
+   (ext>0?"（+"+ext+"分）":"")+(linked?"　同卓："+selected+"・"+linked:"");
+}
+
+function openSeat(no){
+ selected=no;
+ const d=state[no];
+ pendingStatus=(d&&d.status)?d.status:"busy";
+ $("#setCleaning").classList.toggle("selected",pendingStatus==="cleaning");
+ $("#setUnavailable").classList.toggle("selected",pendingStatus==="unavailable");
+ $("#title").textContent=no+"卓";
+ $("#start").value=(d&&d.start)?d.start:now();
+ $("#extend").value=(d&&d.extend)?d.extend:0;
+ const course=(d&&d.course)?d.course:"ST";
+ const radio=$('input[name="course"][value="'+course+'"]');
+ if(radio)radio.checked=true;
+ fillLinked(no);
+ const ms=d?members(no):[];
+ $("#linked").value=ms.length>1?(ms.find(n=>n!==no)||""):"";
+ $("#clear").style.display=d?"block":"none";
+ preview();
+ openModal();
+}
+
+function render(){
+ const nowMin=(new Date()).getHours()*60+(new Date()).getMinutes();
+ $$(".seat").forEach(function(b){
+   const no=b.dataset.seat,d=state[no];
+   b.style.removeProperty("--group-color");
+   if(!d){
+     b.className="seat";
+     b.innerHTML='<b class="seatno">'+no+'</b><span class="empty">空席</span>';
+     return;
+   }
+   if(d.status==="cleaning"){
+     b.className="seat cleaning";
+     b.innerHTML='<b class="seatno">'+no+'</b><span class="meta">清掃中</span>';
+     return;
+   }
+   if(d.status==="unavailable"){
+     b.className="seat unavailable";
+     b.innerHTML='<b class="seatno">'+no+'</b><span class="meta">使用不可</span>';
+     return;
+   }
+   b.className="seat busy"+(d.groupId?" grouped":"");
+   const x=calc(d.start,d.course,d.extend),ms=members(no);
+   let diff=x.end-nowMin,remain=diff>=0?"あと"+diff+"分":Math.abs(diff)+"分超過";
+   b.innerHTML='<b class="seatno">'+no+'</b>'+
+     '<span class="meta">'+x.meal+' / '+defs[d.course].short+'</span>'+
+     '<span class="until">'+fmt(x.end)+'迄</span>'+
+     '<span class="remaining'+(diff<0?' over':'')+'">'+remain+'</span>'+
+     (Number(d.extend)>0?'<span class="groupmark">+'+d.extend+'分</span>':'')+
+     (ms.length>1?'<span class="groupmark">同卓 '+ms.join("・")+'</span>':'');
+ });
+
+ const seen=new Set(),rows=[];
+ Object.keys(state).forEach(function(no){
+   const d=state[no];
+   if(!d || d.status==="cleaning" || d.status==="unavailable" || !d.start || !d.course)return;
+   const gid=d.groupId||("solo-"+no);
+   if(seen.has(gid))return;
+   seen.add(gid);
+   const ms=d.groupId?members(no):[no],x=calc(d.start,d.course,d.extend);
+   rows.push({no:no,d:d,gid:gid,ms:ms,x:x});
+ });
+ rows.sort((a,b)=>a.x.end-b.x.end||Number(a.no)-Number(b.no));
+
+ $("#queue").innerHTML=rows.length?rows.map(function(r){
+   let diff=r.x.end-nowMin,remain=diff>=0?"あと"+diff+"分":Math.abs(diff)+"分超過";
+   return '<div class="row'+(r.ms.length>1?' grouped':'')+'">'+
+     '<span class="num">'+r.ms.join("・")+'</span>'+
+     '<span>'+r.x.meal+' / '+defs[r.d.course].short+'<br><small class="'+(diff<0?'remaining over':'remaining')+'">'+remain+'</small></span>'+
+     '<span class="time">'+fmt(r.x.end)+'</span></div>';
+ }).join(""):'<div class="none">現在、終了時刻が登録された席はありません</div>';
+
+ const active=Object.keys(state).filter(n=>state[n]&&state[n].status!=="cleaning"&&state[n].status!=="unavailable");
+ const groups=new Set(active.map(n=>state[n].groupId||("solo-"+n)));
+ $("#count").textContent="使用中 "+groups.size+"卓";
+}
+function init(){
+ load();
+ $("#map").addEventListener("click",function(e){
+   const b=e.target.closest(".seat");
+   if(b)openSeat(b.dataset.seat);
+ });
+ $("#cancel").addEventListener("click",closeModal);
+ $("#setCleaning").addEventListener("click",function(){
+   pendingStatus = pendingStatus==="cleaning" ? "busy" : "cleaning";
+   $("#setCleaning").classList.toggle("selected",pendingStatus==="cleaning");
+   $("#setUnavailable").classList.remove("selected");
+   preview();
+ });
+ $("#setUnavailable").addEventListener("click",function(){
+   pendingStatus = pendingStatus==="unavailable" ? "busy" : "unavailable";
+   $("#setUnavailable").classList.toggle("selected",pendingStatus==="unavailable");
+   $("#setCleaning").classList.remove("selected");
+   preview();
+ });
+ $("#resetAll").addEventListener("click",async function(){
+   if(!confirm("すべての席情報をリセットして、全席を空席に戻します。よろしいですか？"))return;
+   state={};save();render();await cloudResetAll();
+ });
+ $("#dlg").addEventListener("click",function(e){if(e.target===this)closeModal()});
+ $("#start").addEventListener("input",preview);
+ $("#extend").addEventListener("input",preview);
+ $("#linked").addEventListener("change",preview);
+ $$(".course input").forEach(r=>r.addEventListener("change",preview));
+
+ $("#clear").addEventListener("click",async function(){
+   const ms=members(selected),deleted=[];let changed=[];
+   if(ms.length>1){
+     if(confirm(ms.join("・")+" は同じ卓です。まとめてリセットしますか？")){
+       ms.forEach(n=>{deleted.push(n);delete state[n]});
+     }else{
+       deleted.push(selected);delete state[selected];
+       changed=ms.filter(n=>n!==selected);changed.forEach(n=>{if(state[n])state[n].groupId=null});
+     }
+   }else{deleted.push(selected);delete state[selected];}
+   save();closeModal();render();
+   await cloudDeleteSeats(deleted);await cloudUpsertSeats(changed);
+ });
+
+ $("#form").addEventListener("submit",async function(e){
+   e.preventDefault();
+ if(pendingStatus==="cleaning" || pendingStatus==="unavailable"){
+   const old=members(selected);
+   old.filter(n=>n!==selected).forEach(function(n){if(state[n])state[n].groupId=null});
+   state[selected]={status:pendingStatus};
+   save();closeModal();render();
+   await cloudUpsertSeats(old.filter(n=>n!==selected));
+   await cloudUpsertSeats([selected]);
+   return;
+ }
+
+   const r=$('input[name="course"]:checked');
+   if(!r)return;
+   const start=$("#start").value,course=r.value;
+   const extend=Math.max(0,Number($("#extend").value)||0);
+   const linked=$("#linked").value;
+
+   const old=members(selected);
+   old.filter(n=>n!==selected).forEach(n=>{if(state[n])state[n].groupId=null});
+
+   if(linked){
+     const lm=state[linked]?members(linked):[linked];
+     const gid=(state[linked]&&state[linked].groupId)||("g-"+Date.now()+"-"+selected+"-"+linked);
+     Array.from(new Set([selected].concat(lm))).forEach(function(n){
+       state[n]={status:"busy",start:start,course:course,extend:extend,groupId:gid};
+     });
+   }else{
+     state[selected]={status:"busy",start:start,course:course,extend:extend,groupId:null};
+   }
+   save();closeModal();render();
+   const affected=Array.from(new Set(old.concat(linked?(state[linked]?members(linked):[linked]):[]).concat([selected])));
+   await cloudUpsertSeats(affected);
+ });
+
+ render();
+ cloudLoad().then(function(){subscribeCloud()});
+ setInterval(render,60000);
+}
+
+if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",init);
+else init();
+
+if("serviceWorker" in navigator){
+ window.addEventListener("load",function(){navigator.serviceWorker.register("./sw.js").catch(function(){})});
+}
+})();
+</script>
+</body></html>
